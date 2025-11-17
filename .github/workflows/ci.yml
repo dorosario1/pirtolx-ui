@@ -32,5 +32,5 @@ jobs:
           tags: ghcr.io/dorosario1/pirtolx-ui:v4
 
       - name: Trigger deploy webhook
-        if: ${{ secrets.DEPLOY_HOOK != '' }}
+        if: ${{ !startsWith(secrets.DEPLOY_HOOK, '') }}
         run: curl -fsS -X POST "${{ secrets.DEPLOY_HOOK }}" || true
