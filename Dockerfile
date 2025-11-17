@@ -3,14 +3,17 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+# Install system deps
+RUN apk add --no-cache libc6-compat
 
-# Copy source
+# Install deps (production + build tools)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy full project
 COPY . .
 
-# Build NEXT in production mode
+# Build Next.js
 RUN npm run build
 
 
@@ -24,12 +27,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
 # Only copy necessary build output
-COPY --from=builder /app/package.json .
+COPY --from=builder /app/package.json ./ 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 
-# Install ONLY production dependencies
-RUN npm ci --omit=dev --legacy-peer-deps
+# Install ONLY production deps
+RUN npm ci --omit=dev
 
 EXPOSE 3000
 
