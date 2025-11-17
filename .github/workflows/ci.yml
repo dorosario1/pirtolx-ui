@@ -32,6 +32,12 @@ jobs:
           tags: ghcr.io/dorosario1/pirtolx-ui:v4
 
       - name: Trigger deploy webhook
-        if: ${{ secrets.DEPLOY_HOOK != '' }}
+        if: ${{ always() }}
+        env:
+          DEPLOY_HOOK: ${{ secrets.DEPLOY_HOOK }}
         run: |
-          curl -fsS -X POST "${{ secrets.DEPLOY_HOOK }}" || true
+          if [ -n "$DEPLOY_HOOK" ]; then
+            curl -fsS -X POST "$DEPLOY_HOOK" || true
+          else
+            echo "No DEPLOY_HOOK set, skipping deploy trigger."
+          fi
