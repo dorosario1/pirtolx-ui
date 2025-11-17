@@ -1,39 +1,46 @@
-# ------------------------------------------------
-# 1) BUILDER - compile Next.js
-# ------------------------------------------------
+# ------------------------------
+# 1) BUILDER – compile Next.js
+# ------------------------------
 FROM node:20-alpine AS builder
+
+# Build dependencies (needed for Next.js + sharp + swc)
+RUN apk add --no-cache \
+    libc6-compat \
+    python3 \
+    make \
+    g++ 
+
 WORKDIR /app
 
-# Install system deps
-RUN apk add --no-cache libc6-compat
-
-# Install only production deps needed for the build
+# Copy minimal files for deterministic caching
 COPY package.json package-lock.json ./
+
+# Install ALL dependencies (prod + dev)
 RUN npm ci --legacy-peer-deps
 
-# Copy project
+# Copy app source
 COPY . .
 
-# Build Next.js
+# Build the production bundle
 RUN npm run build
 
-# ------------------------------------------------
-# 2) RUNNER - ultra light
-# ------------------------------------------------
+
+# ------------------------------
+# 2) RUNNER – ultra-light image
+# ------------------------------
 FROM node:20-alpine AS runner
+
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
-# Copy only necessary build output
-COPY --from=builder /app/package.json ./package.json
+# Copy only the necessary output from build stage
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-
-# Install ONLY production dependencies
-RUN npm ci --omit=dev --legacy-peer-deps
 
 EXPOSE 3000
 
