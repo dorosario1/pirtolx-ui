@@ -1,24 +1,31 @@
 # ---------- BUILDER ----------
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Install system deps
-RUN apk add --no-cache libc6-compat
+# Install OS deps for sharp
+RUN apt-get update && apt-get install -y \
+    libc6-dev \
+    libvips-dev \
+    python3 \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install deps (production + build tools)
+# Copy critical files
 COPY package.json package-lock.json ./
+
+# Install dependencies
 RUN npm ci
 
-# Copy full project
+# Copy all sources
 COPY . .
 
-# Build Next.js
+# Production build
 RUN npm run build
 
 
 # ---------- RUNNER ----------
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
 WORKDIR /app
 
@@ -26,12 +33,13 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
-# Only copy necessary build output
-COPY --from=builder /app/package.json ./ 
+# Copy only what is needed for runtime
+COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 
-# Install ONLY production deps
+# Install only prod deps
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 EXPOSE 3000
