@@ -1,47 +1,42 @@
-# ------------------------------
-# 1) BUILDER – compile Next.js
-# ------------------------------
+# -------------------------------------------------
+# BUILDER — compile Next.js en production
+# -------------------------------------------------
 FROM node:20-alpine AS builder
-
-# Build dependencies (needed for Next.js + sharp + swc)
-RUN apk add --no-cache \
-    libc6-compat \
-    python3 \
-    make \
-    g++ 
 
 WORKDIR /app
 
-# Copy minimal files for deterministic caching
-COPY package.json package-lock.json ./
+# Copier les fichiers de dépendances (sans erreur si lockfile absent)
+COPY package.json ./
+COPY package-lock.json* ./
+COPY yarn.lock* ./
+COPY pnpm-lock.yaml* ./
 
-# Install ALL dependencies (prod + dev)
-RUN npm ci --legacy-peer-deps
+# Installer les dépendances
+RUN npm ci || npm install
 
-# Copy app source
+# Copier le reste du code
 COPY . .
 
-# Build the production bundle
+# Build Next.js
 RUN npm run build
 
-
-# ------------------------------
-# 2) RUNNER – ultra-light image
-# ------------------------------
+# -------------------------------------------------
+# RUNNER — image finale ultra légère
+# -------------------------------------------------
 FROM node:20-alpine AS runner
 
 WORKDIR /app
-
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
-# Copy only the necessary output from build stage
+# Copier seulement les fichiers nécessaires
 COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/next.config.js ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 
-EXPOSE 3000
+# Installer uniquement les dépendances prod
+RUN npm ci --omit=dev || npm install --omit=dev
 
-CMD ["node", "node_modules/next/dist/bin/next", "start", "-p", "3000"]
+EXPOSE 3000
+CMD ["npm", "start"]
