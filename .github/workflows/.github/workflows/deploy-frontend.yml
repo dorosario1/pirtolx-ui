@@ -1,0 +1,77 @@
+name: Deploy Frontend to VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Create build artifact
+        run: |
+          mkdir artifact
+          cp -r .next package.json package-lock.json next.config.js ecosystem.config.js public artifact/
+          tar -czf frontend.tar.gz artifact
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend_build
+          path: frontend.tar.gz
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend_build
+          path: .
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Transfer build + deploy script
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          REMOTE_DIR: ${{ secrets.REMOTE_APP_DIR }}
+        run: |
+          scp -P $SSH_PORT frontend.tar.gz $SSH_USER@$SSH_HOST:$REMOTE_DIR/
+          scp -P $SSH_PORT deploy/remote_deploy.sh $SSH_USER@$SSH_HOST:$REMOTE_DIR/
+
+      - name: Execute remote deploy script
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          REMOTE_DIR: ${{ secrets.REMOTE_APP_DIR }}
+        run: |
+          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "cd $REMOTE_DIR && bash remote_deploy.sh"
