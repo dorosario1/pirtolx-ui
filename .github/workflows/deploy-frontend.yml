@@ -1,33 +1,40 @@
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
+deploy:
+  needs: build
+  runs-on: ubuntu-latest
 
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build
+  steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build
 
-      - name: DEBUG Show SSH_HOST
-        run: echo "HOST=[$SSH_HOST]"
+    - name: DEBUG Show SSH_HOST
+      env:
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_USER: ${{ secrets.SSH_USER }}
+        SSH_PORT: ${{ secrets.SSH_PORT }}
+      run: |
+        echo "DEBUG SSH_HOST = [$SSH_HOST]"
+        echo "DEBUG SSH_USER = [$SSH_USER]"
+        echo "DEBUG SSH_PORT = [$SSH_PORT]"
 
-      - name: Deploy to VPS
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+    - name: Deploy to VPS
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SSH_USER: ${{ secrets.SSH_USER }}
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_PORT: ${{ secrets.SSH_PORT }}
+        REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
 
-          ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "mkdir -p $REMOTE_APP_DIR"
-          scp -P $SSH_PORT build.tar.gz $SSH_USER@$SSH_HOST:$REMOTE_APP_DIR/build.tar.gz
+        ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "mkdir -p $REMOTE_APP_DIR"
+        scp -P $SSH_PORT build.tar.gz $SSH_USER@$SSH_HOST:$REMOTE_APP_DIR/build.tar.gz
 
-          ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "
-            cd $REMOTE_APP_DIR &&
-            tar -xzf build.tar.gz &&
-            rm -f build.tar.gz
-          "
+        ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "
+          cd $REMOTE_APP_DIR &&
+          tar -xzf build.tar.gz &&
+          rm -f build.tar.gz
+        "
