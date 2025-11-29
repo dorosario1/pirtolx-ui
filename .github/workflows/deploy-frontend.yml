@@ -42,13 +42,15 @@ jobs:
         with:
           name: frontend-build
 
-      - name: DEBUG RAW SSH_HOST
+      - name: DEBUG RAW SSH_HOST (force output)
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
-          echo "HOST RAW START"
-          printf '%s' "$SSH_HOST" | hexdump -C
-          echo "HOST RAW END"
+          echo ">>>>>>>>>>>> START RAW HOST"
+          echo "VALUE: [$SSH_HOST]"
+          printf 'HEX:\n'
+          printf '%s' "$SSH_HOST" | od -An -tx1
+          echo "\n<<<<<<<<<<<< END RAW HOST"
 
       - name: Setup SSH and deploy
         env:
