@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -36,47 +37,53 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build
 
-      - name: DEBUG RAW SSH_HOST (force output)
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-        run: |
-          echo ">>>>>>>>>>>> START RAW HOST"
-          echo "VALUE: [$SSH_HOST]"
-          printf 'HEX:\n'
-          printf '%s' "$SSH_HOST" | od -An -tx1
-          echo "\n<<<<<<<<<<<< END RAW HOST"
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
-      - name: Setup SSH and deploy
+      - name: Debug secrets values
+        run: |
+          echo "HOST=[$DEPLOY_HOST]"
+          echo "USER=[$DEPLOY_USER]"
+          echo "PORT=[$DEPLOY_PORT]"
+          echo "DIR=[$REMOTE_APP_DIR]"
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
+
+      - name: Deploy to VPS
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          set -e
 
-          ssh-keyscan -p $SSH_PORT $SSH_HOST >> ~/.ssh/known_hosts
+          echo "Accepting SSH host key..."
+          ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts
 
-          echo "Connecting to $SSH_USER@$SSH_HOST:$SSH_PORT"
-          echo "Remote directory: $REMOTE_APP_DIR"
+          echo "Creating remote directory..."
+          ssh -p $DEPLOY_PORT $DEPLOY_USER@$DEPLOY_HOST "mkdir -p $REMOTE_APP_DIR"
 
-          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "mkdir -p $REMOTE_APP_DIR"
+          echo "Uploading build..."
+          scp -P $DEPLOY_PORT build.tar.gz $DEPLOY_USER@$DEPLOY_HOST:$REMOTE_APP_DIR/
 
-          scp -P $SSH_PORT build.tar.gz $SSH_USER@$SSH_HOST:$REMOTE_APP_DIR/
-
-          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "
+          echo "Extracting build..."
+          ssh -p $DEPLOY_PORT $DEPLOY_USER@$DEPLOY_HOST "
             cd $REMOTE_APP_DIR &&
             tar -xzf build.tar.gz &&
-            rm build.tar.gz &&
-            npm install --production &&
-            echo 'Deployment done'
+            rm build.tar.gz
           "
+
+          echo "Deployment completed successfully."
