@@ -42,6 +42,14 @@ jobs:
         with:
           name: frontend-build
 
+      - name: DEBUG RAW SSH_HOST
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          echo "HOST RAW START"
+          printf '%s' "$SSH_HOST" | hexdump -C
+          echo "HOST RAW END"
+
       - name: Setup SSH and deploy
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
