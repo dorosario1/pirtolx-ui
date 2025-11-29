@@ -2,49 +2,64 @@ name: Deploy Frontend to VPS
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Next.js
         run: npm run build
 
-      - name: Upload build artifact
+      - name: Archive production build
+        run: tar -czf build.tar.gz .next public package.json next.config.js
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
-          path: .next
+          path: build.tar.gz
+
   deploy:
-    runs-on: ubuntu-latest
     needs: build
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Download build artifact
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build
-          path: .next
 
       - name: Deploy to VPS
-        uses: easingthemes/ssh-deploy@main
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.VPS_HOST }}
-          REMOTE_USER: ubuntu
-          TARGET: /var/www/app.pirtolx.tech/current
-          SOURCE: .next
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "mkdir -p $REMOTE_APP_DIR"
+          scp -P $SSH_PORT build.tar.gz $SSH_USER@$SSH_HOST:$REMOTE_APP_DIR/build.tar.gz
+
+          ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "
+            cd $REMOTE_APP_DIR &&
+            tar -xzf build.tar.gz &&
+            rm -f build.tar.gz
+          "
