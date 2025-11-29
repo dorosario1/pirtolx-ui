@@ -1,40 +1,76 @@
-deploy:
-  needs: build
-  runs-on: ubuntu-latest
+name: Deploy Frontend to VPS
 
-  steps:
-    - name: Download artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: frontend-build
+on:
+  push:
+    branches: [ main ]
 
-    - name: DEBUG Show SSH_HOST
-      env:
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_USER: ${{ secrets.SSH_USER }}
-        SSH_PORT: ${{ secrets.SSH_PORT }}
-      run: |
-        echo "DEBUG SSH_HOST = [$SSH_HOST]"
-        echo "DEBUG SSH_USER = [$SSH_USER]"
-        echo "DEBUG SSH_PORT = [$SSH_PORT]"
+jobs:
 
-    - name: Deploy to VPS
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        SSH_USER: ${{ secrets.SSH_USER }}
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_PORT: ${{ secrets.SSH_PORT }}
-        REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
-      run: |
-        mkdir -p ~/.ssh
-        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
+  build:
+    runs-on: ubuntu-latest
 
-        ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "mkdir -p $REMOTE_APP_DIR"
-        scp -P $SSH_PORT build.tar.gz $SSH_USER@$SSH_HOST:$REMOTE_APP_DIR/build.tar.gz
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-        ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "
-          cd $REMOTE_APP_DIR &&
-          tar -xzf build.tar.gz &&
-          rm -f build.tar.gz
-        "
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Next.js
+        run: npm run build
+
+      - name: Archive production build
+        run: tar -czf build.tar.gz .next public package.json next.config.js
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: build.tar.gz
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+
+      - name: DEBUG Show SSH_HOST
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          echo "DEBUG SSH_HOST = [$SSH_HOST]"
+          echo "DEBUG SSH_USER = [$SSH_USER]"
+          echo "DEBUG SSH_PORT = [$SSH_PORT]"
+
+      - name: Deploy to VPS
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "mkdir -p $REMOTE_APP_DIR"
+          scp -P $SSH_PORT build.tar.gz $SSH_USER@$SSH_HOST:$REMOTE_APP_DIR/build.tar.gz
+
+          ssh -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SSH_HOST "
+            cd $REMOTE_APP_DIR &&
+            tar -xzf build.tar.gz &&
+            rm -f build.tar.gz
+          "
