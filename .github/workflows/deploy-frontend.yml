@@ -5,6 +5,7 @@ on:
     branches: [main]
 
 jobs:
+
   build:
     runs-on: ubuntu-latest
 
@@ -22,10 +23,24 @@ jobs:
         run: npm install
 
       - name: Build Next.js
-        run: npm run build
+        run: |
+          echo "Running Next.js build..."
+          npm run build
+
+      - name: Verify .next folder
+        run: |
+          echo "Checking .next directory:"
+          ls -al .next || { echo ".next folder missing! Build FAILED"; exit 1; }
 
       - name: Archive production build
-        run: tar -czf build.tar.gz .next public package.json next.config.js
+        run: |
+          echo "Creating build.tar.gz..."
+          tar -czf build.tar.gz .next public package.json next.config.js
+
+      - name: Verify artifact exists
+        run: |
+          echo "Verifying build.tar.gz:"
+          ls -al build.tar.gz || { echo "build.tar.gz not found!"; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -33,6 +48,7 @@ jobs:
           name: frontend-build
           path: build.tar.gz
           retention-days: 1
+
 
   deploy:
     needs: build
